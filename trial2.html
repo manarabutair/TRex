@@ -114,19 +114,18 @@
                 }
             });
 
-            // let toAppend =""; 
-            // definedVariables.forEach(variableName => {
-            //     // toAppend += `\n cout &lt&lt "${variableName}: " &lt&lt ${variableName} &lt&lt endl;`;
-            //     toAppend += `\n cout << "${variableName}: " << ${variableName} << endl;`;
+            let toAppend =""; 
+            definedVariables.forEach(variableName => {
+                toAppend += `\n cout << "${variableName}: " << ${variableName} << endl;`;
     
-            // }); 
-            // definedArrays.forEach(variableName => {
-            //     toAppend += `\ncout << "arr ${variableName} ${arraysDict.variableName.length}: "<< endl;`;
-    
-            // });
-        
-            // codechunk = codechunk.replace(/(\breturn\b)/g, toAppend + '$1');
-
+            }); 
+            definedArrays.forEach(variableName => {
+                toAppend += `\n cout << "arr ${variableName} ${arraysDict.variableName.length}: "<< endl;`;
+            });
+            let regexCout= /(\breturn\b)/g; 
+            codeChunk = codeChunk.replace(regexCout, match => {
+                return `${toAppend}\n${match}`;
+            });
             async function runCppCode() {
                 const response = await fetch('/run-cpp', {
                     method: 'POST',
