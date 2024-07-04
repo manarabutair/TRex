@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T-Rex</title>
+    <style>
+        body {
+            background-color: #c1defd;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        textarea {
+            width: 80%;
+            height: 150px;
+            margin: 20px 0;
+            font-size: 16px;
+            border-radius: 15px;
+            padding: 10px;
+            border: 2px solid #000;
+        }
+        .variable-box, .array-box {
+            border: 2px solid #000;
+            background-color: rgb(252, 255, 153);
+            padding: 10px;
+            margin: 5px;
+            display: inline-block;
+            min-width: 50px;
+            border-radius: 15px;
+        }
+        #inputBoxesContainer input {
+            margin: 10px;
+            padding: 5px;
+            font-size: 16px;
+            border-radius: 15px;
+            border: 2px solid #000;
+        }
+        #variablesDisplay {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1><p style="font-family:cursive; font-size: 32px; font-style: Bold; font-weight: bold">
+       T-Rex
+    </p></h1>
+    <textarea id="codeInput" placeholder="Enter your C++ code here..."></textarea>
+    <div id="inputBoxesContainer"></div>
+    <div id="variablesDisplay"></div>
+    <div id="compilerOutput" style="display: none;"></div>
+    <script>
+        let variablesDict; 
+        let arraysDict; 
+        let codeChunk; 
+        let definedVariables = new Set();
+        let definedArrays = new Set(); 
+        let codeInput = document.getElementById('codeInput');
+
+        codeInput.addEventListener('input', function() {
+            updateVariables();
+        });
+
+        function updateVariables() {
+            variablesDict = {}; 
+            arraysDict = {}; 
+            definedVariables.clear(); 
+            definedArrays.clear(); 
+            codeChunk = codeInput.value;
+
+            // Check if the code includes the specified pattern
+            let regexPattern = /^[\s\r\n]*#include\s*<iostream>[\s\S]*[\r\n]+[\s\r\n]*int\s+main\s*\(\s*\)\s*{[\s\S]*return\s+0\s*;\s*}[\s\r\n]*$/s;
+
+            if (!regexPattern.test(codeChunk)) {
+                document.getElementById('variablesDisplay').innerHTML = "Code must include '#include <iostream>' followed by 'int main() { ... return 0; }'";
+                return;
+            }
+
+            let statements = codeChunk.split(';');
+            statements = statements.map((statement, index) => {
+                // Add back the semicolon to all but the last statement
+                if (index < statements.length - 1) {
+                    statement += ';';
+                }
+                if (index > 0) {
+                    statement = ';' + statement;
+                }
+                return statement.trim();
+            });
+
+            let regexVariable = /(?<=[;{][\s\r\n]*)\b(int|float|double|char|string)\s+(\w+)\s*(=\s*\d+)?;/;
+            let regexArray = /(?<=[;{]\s*[\s\r\n]*)\b(int|float|double|char|string)\s+(\w+)\s*\[\s*(\d+)\s*\];/;
+
+            statements.forEach(statement => {
+                let line = statement.trim();
+                if (line === '') return;
+
+                let match;
+
+                // Match variable declarations
+                if ((match = line.match(regexVariable)) !== null) {
+                    let name = match[2].trim();
+                    if (!definedVariables.has(name)) { 
+                        definedVariables.add(name);
+                    }
+                }
+
+                // Match array declarations
+                if ((match = line.match(regexArray)) !== null) {
+                    let name = match[2].trim();
+                    if (!definedArrays.has(name)) {
+                        definedArrays.add(name);
+                    }
+                }
+            });
+
+            // let toAppend =""; 
+            // definedVariables.forEach(variableName => {
+            //     // toAppend += `\n cout &lt&lt "${variableName}: " &lt&lt ${variableName} &lt&lt endl;`;
+            //     toAppend += `\n cout << "${variableName}: " << ${variableName} << endl;`;
+    
+            // }); 
+            // definedArrays.forEach(variableName => {
+            //     toAppend += `\ncout << "arr ${variableName} ${arraysDict.variableName.length}: "<< endl;`;
+    
+            // });
+        
+            // codechunk = codechunk.replace(/(\breturn\b)/g, toAppend + '$1');
+
+            async function runCppCode() {
+                const response = await fetch('/run-cpp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ code: codeChunk })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    updateVariableDisplay(data.output);
+                } else {
+                    document.getElementById('variablesDisplay').innerText = 'Error running code: ' + data.error;
+                }
+            }
+
+            runCppCode();
+        }
+
+        function updateVariableDisplay(output) {
+            let variablesDisplay = document.getElementById('variablesDisplay');
+            variablesDisplay.textContent = codeChunk; 
+
+            let outputLines = output.split('\n');
+            for (let line of outputLines) {
+                let match = line.match(/(\w+)\s*:\s*(.+)/);
+                if (match) {
+                    let name = match[1];
+                    let value = match[2];
+                    if (definedVariables.has(name)) {
+                        variablesDict[name]=value; 
+                        
+                    } 
+                }
+
+                match = line.match(/(arr)\s+(\w+)\s*(\d+)\s*:\s*(.+)/);
+                if (match) {
+                    let name = match[2]; 
+                    let size = parseInt(match[3]); 
+                    let nums = match[4].trim().split(/\s+/); 
+                    if (definedArrays.has(name) && nums.some(num => num !== '')) {
+                        arraysDict[name] = nums; 
+                    } 
+                }
+            }
+
+            for (let variableName in variablesDict) {
+                let variableValue = variablesDict[variableName];
+                let variableElement = document.createElement('div');
+                variableElement.setAttribute('id', variableName + '_display');
+                variableElement.classList.add('variable-box');
+                variableElement.style.borderRadius = '15px';
+                variableElement.textContent = `${variableName}: ${variableValue}`;
+                variablesDisplay.appendChild(variableElement);
+            }
+
+            for (let arrayName in arraysDict) {
+                let array = arraysDict[arrayName];
+                let arrayContainer = document.createElement('div');
+                arrayContainer.style.display = 'flex';
+                arrayContainer.style.justifyContent = 'center';
+
+
+                array.forEach((value, index) => {
+                    let arrayElement = document.createElement('div');
+                    arrayElement.classList.add('array-box');
+                    arrayElement.style.borderRadius = '15px';
+                    arrayElement.textContent = `${value}`;
+                    arrayContainer.appendChild(arrayElement);
+                });
+
+                variablesDisplay.appendChild(arrayContainer);
+            }
+        }
+    </script>
+</body>
+</html>
+
