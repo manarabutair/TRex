@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>T-Rex</title>
+    <title>TRex</title>
     <style>
         body {
             background-color: #c1defd;
@@ -28,6 +28,7 @@
             display: inline-block;
             min-width: 50px;
             border-radius: 15px;
+           
         }
         #inputBoxesContainer input {
             margin: 10px;
@@ -42,9 +43,13 @@
     </style>
 </head>
 <body>
-    <h1><p style="font-family:cursive; font-size: 32px; font-style: Bold; font-weight: bold">
-       T-Rex
+    <h1><p style="font-family:Consolas; font-size: 32px; font-style: Bold; font-weight: bold">
+       TRex
+    </p>
+    <p style="font-family:Consolas; font-size: 20px; font-style: italic; font-weight: normal; margin-top: -15px;">
+        Real time variable tracking
     </p></h1>
+
     <textarea id="codeInput" placeholder="Enter your C++ code here..."></textarea>
     <div id="inputBoxesContainer"></div>
     <div id="variablesDisplay"></div>
@@ -69,10 +74,11 @@
             codeChunk = codeInput.value;
 
             // Check if the code includes the specified pattern
-            let regexPattern = /^[\s\r\n]*#include\s*<iostream>[\s\S]*[\r\n]+[\s\r\n]*int\s+main\s*\(\s*\)\s*{[\s\S]*return\s+0\s*;\s*}[\s\r\n]*$/s;
+            let regexPattern = /(?:[\s\S]*?)\bint\s+main\s*\(\s*\)\s*{\s*(?:[\s\S]*?)?\s*return\s+0\s*;\s*}\s*(?:[\s\S]*?)$/;
+            ;
 
             if (!regexPattern.test(codeChunk)) {
-                document.getElementById('variablesDisplay').innerHTML = "Code must include '#include <iostream>' followed by 'int main() { ... return 0; }'";
+                document.getElementById('variablesDisplay').innerHTML = "Code must include 'int main() { ... return 0; }'";
                 return;
             }
 
@@ -88,8 +94,9 @@
                 return statement.trim();
             });
 
-            let regexVariable = /(?<=[;{][\s\r\n]*)\b(int|float|double|char|string)\s+(\w+)\s*(=\s*\d+)?;/;
-            let regexArray = /(?<=[;{]\s*[\s\r\n]*)\b(int|float|double|char|string)\s+(\w+)\s*\[\s*(\d+)\s*\];/;
+            // Updated regex patterns
+            let regexVariable = /\b(int|float|double|char|string)\s+((?:\w+(?:\s*=\s*[^,;]*)?(?:\s*,\s*)?)*)\s*;/;
+            let regexArray = /(?<=[};{]\s*[\s\r\n]*)\b(int|float|double|char|string)\s+(\w+)\s*\[\s*(\d+)\s*\]\s*(=\s*\{[^;]*\})?\s*;/;
 
             statements.forEach(statement => {
                 let line = statement.trim();
@@ -99,28 +106,36 @@
 
                 // Match variable declarations
                 if ((match = line.match(regexVariable)) !== null) {
-                    let name = match[2].trim();
-                    if (!definedVariables.has(name)) { 
-                        definedVariables.add(name);
-                    }
+                    let type = match[1].trim();
+                    let vars = match[2].split(/\s*,\s*/); // Split the variables by comma
+                    vars.forEach(varDeclaration => {
+                        let varMatch = varDeclaration.match(/(\w+)\s*(?:=\s*[^;]*)?/);
+                        if (varMatch) {
+                            let name = varMatch[1].trim();
+                            if (!definedVariables.has(name)) { 
+                                definedVariables.add(name);
+                            }
+                        }
+                    });
                 }
 
                 // Match array declarations
                 if ((match = line.match(regexArray)) !== null) {
                     let name = match[2].trim();
+                    let size = match[3].trim(); 
                     if (!definedArrays.has(name)) {
-                        definedArrays.add(name);
+                        definedArrays.add([name, size]);
                     }
                 }
             });
 
             let toAppend =""; 
             definedVariables.forEach(variableName => {
-                toAppend += `\n cout << "${variableName}: " << ${variableName} << endl;`;
+                toAppend += `\n cout << "${variableName}: " << ${variableName} << endl;\n`;
     
             }); 
             definedArrays.forEach(variableName => {
-                toAppend += `\n cout << "arr ${variableName} ${arraysDict.variableName.length}: "<< endl;`;
+                toAppend += `\n cout << "arr ${variableName[0]} ${variableName[1]}: "; for(int i=0; i<${variableName[1]}; ++i) cout<<${variableName[0]}[i]<<" "; cout<<endl;\n`;
             });
             let regexCout= /(\breturn\b)/g; 
             codeChunk = codeChunk.replace(regexCout, match => {
@@ -147,9 +162,14 @@
             runCppCode();
         }
 
+        function isNumber(str) {
+            return !isNaN(parseFloat(str)) && isFinite(str);    
+        }
+
         function updateVariableDisplay(output) {
             let variablesDisplay = document.getElementById('variablesDisplay');
-            variablesDisplay.textContent = codeChunk; 
+            
+            variablesDisplay.textContent='';
 
             let outputLines = output.split('\n');
             for (let line of outputLines) {
@@ -157,21 +177,23 @@
                 if (match) {
                     let name = match[1];
                     let value = match[2];
-                    if (definedVariables.has(name)) {
-                        variablesDict[name]=value; 
-                        
-                    } 
+                    if (!isNumber(name))
+                    variablesDict[name]=value; 
                 }
 
-                match = line.match(/(arr)\s+(\w+)\s*(\d+)\s*:\s*(.+)/);
+                // Correct regex pattern
+        
+                match = line.match(/arr\s+(\w+)\s*\d+\s*:\s*(.+)/);
                 if (match) {
-                    let name = match[2]; 
-                    let size = parseInt(match[3]); 
-                    let nums = match[4].trim().split(/\s+/); 
-                    if (definedArrays.has(name) && nums.some(num => num !== '')) {
-                        arraysDict[name] = nums; 
-                    } 
+                    let name = match[1]; // Array name is in the first capturing group
+                    let nums = match[2].trim().split(/\s+/); // Array elements are in the second capturing group
+
+                    if (nums.some(num => num !== '')) {
+                        arraysDict[name] = nums; // Add the array name and its elements to the dictionary
+                    }
                 }
+                
+
             }
 
             for (let variableName in variablesDict) {
@@ -182,27 +204,41 @@
                 variableElement.style.borderRadius = '15px';
                 variableElement.textContent = `${variableName}: ${variableValue}`;
                 variablesDisplay.appendChild(variableElement);
+
+                // Add a space after each variable
+                let spaceAfterVariable = document.createElement('div');
+                spaceAfterVariable.style.height = '10px'; // Adjust the height as needed
+                variablesDisplay.appendChild(spaceAfterVariable);
             }
 
             for (let arrayName in arraysDict) {
                 let array = arraysDict[arrayName];
-                let arrayContainer = document.createElement('div');
-                arrayContainer.style.display = 'flex';
-                arrayContainer.style.justifyContent = 'center';
 
+                // Create and add a box for the array name
+                let arrayNameBox = document.createElement('div');
+                arrayNameBox.classList.add('array-box');
+                arrayNameBox.style.borderRadius = '15px';
+                arrayNameBox.style.marginBottom = '10px';
+                arrayNameBox.textContent = arrayName + ":";
+                variablesDisplay.appendChild(arrayNameBox);
 
-                array.forEach((value, index) => {
+                array.forEach((value) => {
                     let arrayElement = document.createElement('div');
                     arrayElement.classList.add('array-box');
                     arrayElement.style.borderRadius = '15px';
+                    arrayElement.style.margin = '0 5px';
                     arrayElement.textContent = `${value}`;
-                    arrayContainer.appendChild(arrayElement);
+                    variablesDisplay.appendChild(arrayElement);
                 });
 
-                variablesDisplay.appendChild(arrayContainer);
+                // Add a space after each array 
+                let spaceAfterArray = document.createElement('div');
+                spaceAfterArray.style.height = '20px'; // Adjust the height as needed
+                variablesDisplay.appendChild(spaceAfterArray);
             }
+
+
         }
     </script>
 </body>
 </html>
-
